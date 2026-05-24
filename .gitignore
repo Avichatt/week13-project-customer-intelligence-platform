@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment
+.env
+
+# Data (large files)
+data/raw/
+data/processed/
+!data/sample/
+
+# MLflow
+mlruns/
+mlartifacts/
+
+# Monitoring reports (generated)
+monitoring/reports/*.html
+monitoring/reports/*.png
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+*.log

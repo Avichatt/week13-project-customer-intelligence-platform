@@ -27,8 +27,9 @@ def test_integration_endpoint_success(mock_ask_complaints, client, mock_model_pa
     # Load state
     app.state.model_package = mock_model_package
     
+    from app.schemas import RAGQueryResponse
     # Mock RAG output
-    mock_ask_complaints.return_value = MagicMock(
+    mock_ask_complaints.return_value = RAGQueryResponse(
         answer="Active issue found with credit card unauthorized charge [Complaint ID: 12345].",
         evidence_ids=["12345"],
         evidence_snippets=[{"complaint_id": "12345", "product": "Credit card", "issue": "Unauthorized charges", "snippet": "..."}],

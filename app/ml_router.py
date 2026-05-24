@@ -53,7 +53,11 @@ async def predict_campaign_conversion(request: Request, payload: CustomerPredict
         X_processed = pipeline.transform(df)
         
         # Predict probability
-        prob = float(model.predict_proba(X_processed)[:, 1][0])
+        proba_res = model.predict_proba(X_processed)
+        if hasattr(proba_res, "ndim") and proba_res.ndim == 2:
+            prob = float(proba_res[:, 1][0])
+        else:
+            prob = float(proba_res[0][1])
         pred = bool(prob >= 0.5)
         
         # Risk classification

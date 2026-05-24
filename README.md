@@ -59,7 +59,7 @@ cp .env.example .env
 ```
 Inside `.env`:
 ```env
-GEMINI_API_KEY=AIzaSyA5Fvf_v55uw8jerj8iDya9X_py3zgCNcs
+GEMINI_API_KEY=YOUR_GEMINI_API_KEY_HERE
 MLFLOW_TRACKING_URI=http://localhost:5000
 EMBEDDING_MODEL_NAME=models/text-embedding-004
 GEMINI_MODEL_NAME=gemini-1.5-flash
@@ -136,18 +136,48 @@ curl -X POST http://localhost:8000/ml/predict \
   }'
 ```
 
-#### 3. RAG Grounded Complaints Q&A
+#### 3. High-Volume Batch Scoring
+```bash
+curl -X POST http://localhost:8000/ml/batch-score \
+  -H "Content-Type: application/json" \
+  -d '[
+    {
+      "age": 35,
+      "job": "management",
+      "marital": "married",
+      "education": "university.degree",
+      "default": "no",
+      "housing": "yes",
+      "loan": "no",
+      "contact": "cellular",
+      "month": "may",
+      "day_of_week": "mon",
+      "campaign": 2,
+      "pdays": 999,
+      "previous": 0,
+      "poutcome": "nonexistent",
+      "emp.var.rate": -1.8,
+      "cons.price.idx": 92.893,
+      "cons.conf.idx": -46.2,
+      "euribor3m": 1.299,
+      "nr.employed": 5099.1
+    }
+  ]'
+```
+
+#### 4. RAG Grounded Complaints Q&A (with Metadata Filtering)
 ```bash
 curl -X POST http://localhost:8000/rag/ask-complaints \
   -H "Content-Type: application/json" \
   -d '{
     "question": "What issues are clients reporting about credit card billing?",
+    "product": "Credit card or prepaid card",
     "k": 3,
     "threshold": 0.3
   }'
 ```
 
-#### 4. Integrated customer-intel Endpoint
+#### 5. Integrated customer-intel Endpoint (with RAG Filtering)
 ```bash
 curl -X POST http://localhost:8000/integration/customer-intel \
   -H "Content-Type: application/json" \
@@ -173,9 +203,27 @@ curl -X POST http://localhost:8000/integration/customer-intel \
       "euribor3m": 1.299,
       "nr.employed": 5099.1
     },
-    "complaints_question": "Are there issues with checking account overdraft fees?"
+    "complaints_question": "Are there issues with checking account overdraft fees?",
+    "product": "Checking or savings account"
   }'
 ```
+
+#### 6. Observability Metrics
+```bash
+curl http://localhost:8000/metrics
+```
+
+---
+
+## 🔒 Hardened Production-Grade Enhancements
+
+The platform has been hardened with the following enterprise-grade engineering specs:
+1. **Relative Promotion Gates**: 
+   - **ML Pipeline**: An automated safety gate promotes new XGBoost models only if PR-AUC improves by $\ge 3$ percentage points, F1 drops by $\le 2$ percentage points, and inference latency stays $< 50\text{ms}$.
+   - **RAG Pipeline**: Promotes a new FAISS vector index only if retrieval hit-rate and groundedness accuracy improve against a fixed golden evaluation suite.
+2. **Hybrid Semantic & Metadata Search**: Support for filtering CFPB narratives on `product`, `company`, `date`, and `issue` via Python-based hybrid filtering on the top-100 FAISS recall pool.
+3. **In-Memory Observability**: Thread-safe middleware tracks endpoint latency and prediction distribution metrics, exposed via a Prometheus-compatible `/metrics` endpoint.
+4. **Secret Hygiene**: Zero hardcoded API keys. Strictly verified environment configuration.
 
 ---
 
@@ -207,7 +255,7 @@ az containerapp create \
   --ingress external \
   --min-replicas 0 \
   --max-replicas 1 \
-  --env-vars GEMINI_API_KEY=AIzaSyA5Fvf_v55uw8jerj8iDya9X_py3zgCNcs
+  --env-vars GEMINI_API_KEY=YOUR_GEMINI_API_KEY_HERE
 ```
 
 ---
@@ -219,3 +267,4 @@ Run linting and test coverage locally:
 # Run tests
 pytest tests/ -v
 ```
+

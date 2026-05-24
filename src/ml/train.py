@@ -120,7 +120,14 @@ def run_training_pipeline(csv_path, sample_mode=False):
     baseline_model = LogisticRegression(max_iter=1000, random_state=42)
     baseline_model.fit(X_train_processed, y_train)
     y_prob_base = baseline_model.predict_proba(X_test_processed)[:, 1]
+    y_pred_base = baseline_model.predict(X_test_processed)
+    
     auc_base = roc_auc_score(y_test, y_prob_base)
+    f1_base = f1_score(y_test, y_pred_base)
+    
+    # Compute baseline PR-AUC
+    p_base, r_base, _ = precision_recall_curve(y_test, y_prob_base)
+    pr_auc_base = auc(r_base, p_base)
     
     # 2. Improved Model (XGBoost)
     print("Training XGBoost Model...")
@@ -133,7 +140,15 @@ def run_training_pipeline(csv_path, sample_mode=False):
         random_state=42
     )
     xgb_model.fit(X_train_processed, y_train)
-    y_prob_xgb = xgb_model.predict_proba(X_test_processed)[:, 1]
+    
+    # Measure average sample inference latency (preprocess + prediction)
+    import time
+    t0 = time.time()
+    # We transform raw test data and run predict_proba
+    X_test_trans = pipeline.transform(X_test)
+    y_prob_xgb = xgb_model.predict_proba(X_test_trans)[:, 1]
+    latency_xgb_ms = ((time.time() - t0) / len(X_test)) * 1000.0
+    
     y_pred_xgb = xgb_model.predict(X_test_processed)
     
     auc_xgb = roc_auc_score(y_test, y_prob_xgb)
@@ -143,26 +158,23 @@ def run_training_pipeline(csv_path, sample_mode=False):
     p_xgb, r_xgb, _ = precision_recall_curve(y_test, y_prob_xgb)
     pr_auc_xgb = auc(r_xgb, p_xgb)
     
-    print(f"Baseline LR ROC-AUC: {auc_base:.4f}")
-    print(f"XGBoost ROC-AUC: {auc_xgb:.4f}")
-    print(f"XGBoost PR-AUC: {pr_auc_xgb:.4f}")
-    print(f"XGBoost F1-score: {f1_xgb:.4f}")
+    print(f"Baseline LR ROC-AUC: {auc_base:.4f} | PR-AUC: {pr_auc_base:.4f} | F1: {f1_base:.4f}")
+    print(f"XGBoost ROC-AUC: {auc_xgb:.4f} | PR-AUC: {pr_auc_xgb:.4f} | F1: {f1_xgb:.4f}")
+    print(f"XGBoost Average Inference Latency: {latency_xgb_ms:.4f} ms per sample")
     
-    # Run gate checks
-    # To pass: XGBoost AUC must beat Baseline AUC by >= 0.01 AND F1-score >= 0.35, or AUC >= 0.75
-    # When sample_mode=True (for testing/CI), we relax the gate checks to make CI green easily
-    min_auc = 0.70 if sample_mode else 0.75
-    auc_improvement = 0.005 if sample_mode else 0.01
+    # Run gate checks using evaluate_gate
+    from src.ml.evaluate import evaluate_gate
+    gate_res = evaluate_gate(
+        pr_auc_xgb=pr_auc_xgb,
+        pr_auc_base=pr_auc_base,
+        f1_xgb=f1_xgb,
+        f1_base=f1_base,
+        latency_xgb_ms=latency_xgb_ms,
+        sample_mode=sample_mode
+    )
     
-    gate_passed = False
-    gate_reason = ""
-    if auc_xgb < min_auc:
-        gate_reason = f"XGBoost AUC {auc_xgb:.4f} is below minimum threshold of {min_auc}"
-    elif auc_xgb < (auc_base + auc_improvement):
-        gate_reason = f"XGBoost AUC {auc_xgb:.4f} does not beat baseline AUC {auc_base:.4f} by {auc_improvement}"
-    else:
-        gate_passed = True
-        gate_reason = "Model exceeds baseline performance criteria."
+    gate_passed = gate_res["passed"]
+    gate_reason = gate_res["reason"]
         
     print(f"Model Promotion Gate Status: {'PASSED' if gate_passed else 'FAILED'}")
     print(f"Gate details: {gate_reason}")
@@ -184,9 +196,12 @@ def run_training_pipeline(csv_path, sample_mode=False):
         # Log Metrics
         mlflow.log_metrics({
             "baseline_auc": auc_base,
+            "baseline_pr_auc": pr_auc_base,
+            "baseline_f1": f1_base,
             "xgb_auc": auc_xgb,
             "xgb_pr_auc": pr_auc_xgb,
-            "xgb_f1": f1_xgb
+            "xgb_f1": f1_xgb,
+            "xgb_latency_ms": latency_xgb_ms
         })
         
         # Generate and log evaluation plots
@@ -241,4 +256,4 @@ if __name__ == "__main__":
     passed = run_training_pipeline(data_file, sample_mode=use_sample)
     if not passed and not use_sample:
         print("Training completed but model failed performance gate.")
-        sys.exit(0) # Exit cleanly but note failure in logs
+        sys.exit(1) # Exit with error code to prevent deployment on gate failure

@@ -26,34 +26,49 @@ GATE_MIN_F1 = 0.30
 
 
 def evaluate_gate(
-    auc_xgb: float,
-    auc_base: float,
+    pr_auc_xgb: float,
+    pr_auc_base: float,
     f1_xgb: float,
+    f1_base: float,
+    latency_xgb_ms: float,
     sample_mode: bool = False,
 ) -> dict:
     """
     Run the quality gate and return a dict with `passed` (bool) and `reason` (str).
 
-    Gate logic (full data):
-      - XGBoost ROC-AUC >= 0.75                 AND
-      - XGBoost ROC-AUC beats baseline by >= 0.01  AND
-      - XGBoost F1 >= 0.30
+    Gate logic:
+      - XGBoost PR-AUC beats baseline by >= 3 percentage points (1.0% in sample mode)
+      - XGBoost F1 drops by no more than 2 percentage points compared to baseline (5.0% in sample mode)
+      - XGBoost average sample inference latency <= 50.0 ms
     """
-    min_auc = GATE_MIN_AUC_SAMPLE if sample_mode else GATE_MIN_AUC
-    min_improvement = GATE_AUC_IMPROVEMENT_SAMPLE if sample_mode else GATE_AUC_IMPROVEMENT
+    min_improvement = 0.01 if sample_mode else 0.03
+    max_f1_drop = 0.05 if sample_mode else 0.02
+    max_latency = 50.0
 
     reasons = []
-    if auc_xgb < min_auc:
+    
+    # 1. PR-AUC improvement
+    improvement = pr_auc_xgb - pr_auc_base
+    if improvement < min_improvement:
         reasons.append(
-            f"XGBoost AUC {auc_xgb:.4f} < minimum {min_auc}"
+            f"XGBoost PR-AUC {pr_auc_xgb:.4f} improvement over baseline {pr_auc_base:.4f} is {improvement:.4f}, "
+            f"which is less than the required {min_improvement:.4f}"
         )
-    if auc_xgb < (auc_base + min_improvement):
+        
+    # 2. F1 score drop
+    f1_drop = f1_base - f1_xgb
+    if f1_drop > max_f1_drop:
         reasons.append(
-            f"XGBoost AUC {auc_xgb:.4f} does not beat baseline {auc_base:.4f} "
-            f"by >= {min_improvement}"
+            f"XGBoost F1 {f1_xgb:.4f} dropped by {f1_drop:.4f} compared to baseline F1 {f1_base:.4f}, "
+            f"which exceeds the maximum allowed drop of {max_f1_drop:.4f}"
         )
-    if f1_xgb < GATE_MIN_F1:
-        reasons.append(f"XGBoost F1 {f1_xgb:.4f} < minimum {GATE_MIN_F1}")
+        
+    # 3. Latency check
+    if latency_xgb_ms > max_latency:
+        reasons.append(
+            f"XGBoost average sample inference latency {latency_xgb_ms:.2f} ms "
+            f"exceeds limit of {max_latency:.2f} ms"
+        )
 
     passed = len(reasons) == 0
     reason = "All gate criteria met." if passed else " | ".join(reasons)

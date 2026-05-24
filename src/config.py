@@ -18,7 +18,7 @@ for d in [DATA_DIR, RAW_DATA_DIR, PROCESSED_DATA_DIR, SAMPLE_DATA_DIR, REPORTS_D
     d.mkdir(parents=True, exist_ok=True)
 
 # API & Model Configuration
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyA5Fvf_v55uw8jerj8iDya9X_py3zgCNcs")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "models/text-embedding-004")
 GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-1.5-flash")
 

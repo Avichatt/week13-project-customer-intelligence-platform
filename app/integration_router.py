@@ -11,21 +11,46 @@ async def get_integrated_customer_intelligence(request: Request, payload: Custom
     """
     Spine integration endpoint blending predictive scoring and grounded complaints intelligence
     to generate an actionable customer outreach and risk mitigation directive.
+    Accepts optional product, issue, and date metadata filters for complaint analysis.
     """
     try:
         # 1. Run ML campaign conversion prediction
         ml_prediction = await predict_campaign_conversion(request, payload.customer)
         
-        # 2. Run optional RAG complaints query
+        # 2. Run optional RAG complaints query if question or filters are provided
         rag_response = None
-        if payload.complaints_question:
-            # Construct a RAG query payload
+        has_query_trigger = (
+            payload.complaints_question is not None or 
+            payload.product is not None or 
+            payload.issue is not None or 
+            payload.date is not None
+        )
+        
+        if has_query_trigger:
+            question = payload.complaints_question
+            
+            # If no question is supplied but filters exist, frame an automatic semantic question
+            if not question:
+                filters_str = []
+                if payload.product:
+                    filters_str.append(f"product '{payload.product}'")
+                if payload.issue:
+                    filters_str.append(f"issue '{payload.issue}'")
+                if payload.date:
+                    filters_str.append(f"date '{payload.date}'")
+                question = f"Are there customer complaints concerning {', '.join(filters_str)}?"
+                
+            # Construct a RAG query payload with metadata filters
             rag_payload = RAGQueryRequest(
-                question=payload.complaints_question,
+                question=question,
                 k=3,
-                threshold=0.3
+                threshold=0.3,
+                product=payload.product,
+                company=None,  # Not filtered in customer-intel view
+                date=payload.date,
+                issue=payload.issue
             )
-            rag_response = await ask_complaints_intelligence(rag_payload)
+            rag_response = await ask_complaints_intelligence(request, rag_payload)
             
         # 3. Formulate unified outreach directive
         risk_band = ml_prediction.risk_band

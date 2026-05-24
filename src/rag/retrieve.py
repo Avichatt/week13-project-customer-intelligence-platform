@@ -27,9 +27,19 @@ class ComplaintRetriever:
         self.is_loaded = True
         return self
 
-    def retrieve(self, query: str, k: int = 5, threshold: float = 0.3) -> list:
+    def retrieve(
+        self, 
+        query: str, 
+        k: int = 5, 
+        threshold: float = 0.3,
+        product: str | None = None,
+        company: str | None = None,
+        date: str | None = None,
+        issue: str | None = None
+    ) -> list:
         """
-        Embed query, perform FAISS search, and return documents that pass the similarity threshold.
+        Embed query, perform hybrid FAISS search, apply optional metadata filters,
+        and return the top k matching documents that pass the similarity threshold.
         """
         if not self.is_loaded:
             self.load()
@@ -55,23 +65,38 @@ class ComplaintRetriever:
         # Normalize for cosine similarity
         faiss.normalize_L2(query_vector)
         
-        # Search index
-        scores, indices = self.index.search(query_vector, k)
+        # Search index with a larger candidate pool to accommodate subsequent metadata filters
+        k_search = max(100, k * 5)
+        scores, indices = self.index.search(query_vector, k_search)
         
         results = []
         for score, idx in zip(scores[0], indices[0]):
             if idx < 0 or idx >= len(self.metadata):
                 continue
                 
-            # Filter by threshold
+            # Filter by similarity threshold
             if score < threshold:
-                print(f"Skipping match at index {idx} with score {score:.4f} (threshold: {threshold})")
                 continue
                 
             doc = self.metadata[idx].copy()
+            
+            # Apply metadata filters
+            if product and product.lower() not in doc.get("product", "").lower():
+                continue
+            if company and company.lower() not in doc.get("company", "").lower():
+                continue
+            if date and date not in doc.get("date_received", ""):
+                continue
+            if issue and issue.lower() not in doc.get("issue", "").lower():
+                continue
+                
             doc["similarity_score"] = float(score)
             results.append(doc)
             
+            # Stop if we have accumulated enough matches
+            if len(results) >= k:
+                break
+                
         return results
 
 if __name__ == "__main__":

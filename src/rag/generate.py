@@ -6,13 +6,30 @@ class GroundedComplaintAssistant:
     def __init__(self):
         self.retriever = ComplaintRetriever()
         
-    def generate_answer(self, question: str, k: int = 4, threshold: float = 0.3) -> dict:
+    def generate_answer(
+        self, 
+        question: str, 
+        k: int = 4, 
+        threshold: float = 0.3,
+        product: str | None = None,
+        company: str | None = None,
+        date: str | None = None,
+        issue: str | None = None
+    ) -> dict:
         """
-        Retrieves relevant complaints, verifies threshold, and constructs a grounded response.
+        Retrieves relevant complaints, verifies threshold, applies metadata filters, and constructs a grounded response.
         """
         try:
             self.retriever.load()
-            retrieved_docs = self.retriever.retrieve(question, k=k, threshold=threshold)
+            retrieved_docs = self.retriever.retrieve(
+                question, 
+                k=k, 
+                threshold=threshold,
+                product=product,
+                company=company,
+                date=date,
+                issue=issue
+            )
         except Exception as e:
             print(f"Failed to load or retrieve context: {e}")
             retrieved_docs = []
@@ -22,7 +39,8 @@ class GroundedComplaintAssistant:
                 "answer": "I'm sorry, but I couldn't find any relevant complaints in the database matching your query with sufficient confidence.",
                 "evidence_ids": [],
                 "evidence_snippets": [],
-                "sufficiency_note": "Refused answer: No complaints crossed the similarity threshold of " + str(threshold)
+                "sufficiency_note": "Refused answer: No complaints crossed the similarity threshold of " + str(threshold),
+                "prompt_version": "1.0.0"
             }
             
         # Build prompt context
@@ -38,7 +56,8 @@ class GroundedComplaintAssistant:
                 "complaint_id": doc_id,
                 "product": doc.get("product"),
                 "issue": doc.get("issue"),
-                "snippet": snippet
+                "snippet": snippet,
+                "similarity_score": doc.get("similarity_score")
             })
             
             context_blocks.append(
@@ -91,7 +110,8 @@ Response:
             "answer": answer,
             "evidence_ids": evidence_ids,
             "evidence_snippets": evidence_snippets,
-            "sufficiency_note": sufficiency_note
+            "sufficiency_note": sufficiency_note,
+            "prompt_version": "1.0.0"
         }
 
 if __name__ == "__main__":
